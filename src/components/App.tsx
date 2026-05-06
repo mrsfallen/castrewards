@@ -1,6 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+
+const prizes = [
+  { label: "+50 pts", pts: 50, color: "#EEEDFE", text: "#3C3489" },
+  { label: "+20 pts", pts: 20, color: "#E6F1FB", text: "#0C447C" },
+  { label: "+100 pts", pts: 100, color: "#EAF3DE", text: "#27500A" },
+  { label: "Try again", pts: 0, color: "#F1EFE8", text: "#5F5E5A" },
+  { label: "+0.001 ETH", pts: 0, color: "#FAEEDA", text: "#633806" },
+  { label: "+30 pts", pts: 30, color: "#FBEAF0", text: "#72243E" },
+  { label: "+5 pts", pts: 5, color: "#E1F5EE", text: "#085041" },
+  { label: "Try again", pts: 0, color: "#F1EFE8", text: "#5F5E5A" },
+];
+
+const NUM = prizes.length;
+const ARC = (2 * Math.PI) / NUM;
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("missions");
@@ -14,22 +28,58 @@ export default function App() {
   const [prizeWin, setPrizeWin] = useState(false);
   const [toast, setToast] = useState("");
   const [doneMissions, setDoneMissions] = useState<string[]>([]);
-
-  const prizes = [
-    { label: "+50 pts", pts: 50 },
-    { label: "+20 pts", pts: 20 },
-    { label: "+100 pts", pts: 100 },
-    { label: "Try again", pts: 0 },
-    { label: "+0.001 ETH", pts: 0 },
-    { label: "+30 pts", pts: 30 },
-    { label: "+5 pts", pts: 5 },
-    { label: "Try again", pts: 0 },
-  ];
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const angleRef = useRef(0);
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
   };
+
+  const drawWheel = (angle: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const cx = 140, cy = 140, r = 135;
+    ctx.clearRect(0, 0, 280, 280);
+    prizes.forEach((p, i) => {
+      const start = angle + i * ARC;
+      const end = start + ARC;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, start, end);
+      ctx.closePath();
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(start + ARC / 2);
+      ctx.textAlign = "right";
+      ctx.fillStyle = p.text;
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText(p.label, r - 10, 4);
+      ctx.restore();
+    });
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18, 0, 2 * Math.PI);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.strokeStyle = "#AFA9EC";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 8, 0, 2 * Math.PI);
+    ctx.fillStyle = "#3C3489";
+    ctx.fill();
+  };
+
+  useEffect(() => {
+    if (activeTab === "spin") drawWheel(angleRef.current);
+  }, [activeTab]);
 
   const doCheckin = () => {
     if (checkedIn) return;
@@ -57,24 +107,44 @@ export default function App() {
     else setPoints((p) => p - 50);
     setSpinning(true);
     setPrizeMsg("");
-    setTimeout(() => {
-      const win = prizes[Math.floor(Math.random() * prizes.length)];
-      if (win.pts > 0) {
-        setPoints((p) => p + win.pts);
-        setTodayPts((p) => p + win.pts);
-        setPrizeWin(true);
-        setPrizeMsg(`জিতেছ! ${win.label} 🎉`);
-        showToast(`${win.label} জিতেছ!`);
-      } else if (win.label.includes("ETH")) {
-        setPrizeWin(true);
-        setPrizeMsg(`জিতেছ! ${win.label} 🎉`);
-        showToast(`${win.label} জিতেছ!`);
+
+    const winIdx = Math.floor(Math.random() * NUM);
+    const extraSpins = 5 + Math.floor(Math.random() * 3);
+    const targetAngle = angleRef.current + extraSpins * 2 * Math.PI + (2 * Math.PI - (winIdx * ARC + ARC / 2 - (Math.PI / 2 - ARC / 2)));
+    const duration = 3500;
+    const startTime = performance.now();
+    const startAngle = angleRef.current;
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      const current = startAngle + (targetAngle - startAngle) * ease;
+      angleRef.current = current;
+      drawWheel(current);
+      if (progress < 1) {
+        requestAnimationFrame(animate);
       } else {
-        setPrizeWin(false);
-        setPrizeMsg("আবার চেষ্টা করো!");
+        angleRef.current = targetAngle % (2 * Math.PI);
+        setSpinning(false);
+        const prize = prizes[winIdx];
+        if (prize.pts > 0) {
+          setPoints((p) => p + prize.pts);
+          setTodayPts((p) => p + prize.pts);
+          setPrizeWin(true);
+          setPrizeMsg(`জিতেছ! ${prize.label} 🎉`);
+          showToast(`${prize.label} জিতেছ!`);
+        } else if (prize.label.includes("ETH")) {
+          setPrizeWin(true);
+          setPrizeMsg(`জিতেছ! ${prize.label} 🎉`);
+          showToast(`${prize.label} জিতেছ!`);
+        } else {
+          setPrizeWin(false);
+          setPrizeMsg("আবার চেষ্টা করো!");
+        }
       }
-      setSpinning(false);
-    }, 2000);
+    };
+    requestAnimationFrame(animate);
   };
 
   return (
@@ -116,7 +186,8 @@ export default function App() {
           <button onClick={doCheckin} style={{ width: "100%", padding: "12px", background: checkedIn ? "#f0f0f0" : "#3C3489", color: checkedIn ? "#888" : "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: checkedIn ? "default" : "pointer", marginBottom: 10 }}>
             {checkedIn ? "আজকের check-in হয়ে গেছে ✓" : "Check-in করো → +10 pts + 2 free spin"}
           </button>
-          {[{ id: "like", icon: "👍", name: "Like mission", desc: "featured post like করো", pts: 20 },
+          {[
+            { id: "like", icon: "👍", name: "Like mission", desc: "featured post like করো", pts: 20 },
             { id: "recast", icon: "🔁", name: "Recast mission", desc: "আজকের post recast করো", pts: 30 },
             { id: "comment", icon: "💬", name: "Comment mission", desc: "যেকোনো cast-এ reply করো", pts: 15 },
             { id: "follow", icon: "👥", name: "Follow mission", desc: "featured user follow করো", pts: 25 },
@@ -139,24 +210,27 @@ export default function App() {
 
       {/* Spin Tab */}
       {activeTab === "spin" && (
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 80, marginBottom: 16 }}>🎰</div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 16 }}>
-            <div style={{ background: "#EEEDFE", borderRadius: 12, padding: "10px 20px" }}>
-              <div style={{ fontSize: 10, color: "#7F77DD" }}>FREE SPINS</div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style={{ position: "relative", width: 280, height: 280, marginBottom: 14 }}>
+            <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", width: 0, height: 0, borderLeft: "10px solid transparent", borderRight: "10px solid transparent", borderTop: "22px solid #3C3489", zIndex: 10 }} />
+            <canvas ref={canvasRef} width={280} height={280} style={{ borderRadius: "50%", display: "block" }} />
+          </div>
+          <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+            <div style={{ background: "#EEEDFE", border: "1px solid #AFA9EC", borderRadius: 12, padding: "8px 18px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: "#7F77DD", textTransform: "uppercase" }}>Free Spins</div>
               <div style={{ fontSize: 24, fontWeight: 600, color: "#3C3489" }}>{freeSpins}</div>
             </div>
-            <div style={{ background: "#EEEDFE", borderRadius: 12, padding: "10px 20px" }}>
-              <div style={{ fontSize: 10, color: "#7F77DD" }}>PAID SPIN</div>
+            <div style={{ background: "#EEEDFE", border: "1px solid #AFA9EC", borderRadius: 12, padding: "8px 18px", textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: "#7F77DD", textTransform: "uppercase" }}>Paid Spin</div>
               <div style={{ fontSize: 24, fontWeight: 600, color: "#3C3489" }}>50 pts</div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 8, width: "100%", marginBottom: 12 }}>
             <button onClick={() => doSpin(true)} disabled={freeSpins === 0 || spinning} style={{ flex: 1, padding: "12px", background: freeSpins === 0 || spinning ? "#f0f0f0" : "#3C3489", color: freeSpins === 0 || spinning ? "#888" : "#fff", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: freeSpins === 0 || spinning ? "default" : "pointer" }}>
-              {spinning ? "Spinning..." : "Free Spin"}
+              {spinning ? "Spinning... 🎰" : "Free Spin"}
             </button>
             <button onClick={() => doSpin(false)} disabled={points < 50 || spinning} style={{ flex: 1, padding: "12px", background: points < 50 || spinning ? "#f0f0f0" : "#EEEDFE", color: points < 50 || spinning ? "#888" : "#3C3489", border: "1px solid #AFA9EC", borderRadius: 12, fontSize: 13, fontWeight: 600, cursor: points < 50 || spinning ? "default" : "pointer" }}>
-              50 pts Spin
+              50 pts দিয়ে Spin
             </button>
           </div>
           {prizeMsg && (
@@ -171,17 +245,17 @@ export default function App() {
       {activeTab === "redeem" && (
         <div style={{ background: "#fff", border: "1px solid #eee", borderRadius: 16, padding: "20px" }}>
           <div style={{ background: "#EEEDFE", borderRadius: 10, padding: "10px", textAlign: "center", marginBottom: 12, color: "#3C3489", fontWeight: 600 }}>100 points = 0.001 ETH</div>
-          <input placeholder="0x... wallet address" style={{ width: "100%", padding: "10px 12px", border: "1px solid #eee", borderRadius: 10, fontSize: 13, marginBottom: 8, boxSizing: "border-box" as const }} />
-          <input type="number" placeholder="কত points redeem করবে?" style={{ width: "100%", padding: "10px 12px", border: "1px solid #eee", borderRadius: 10, fontSize: 13, marginBottom: 12, boxSizing: "border-box" as const }} />
+          <input placeholder="0x... wallet address" style={{ width: "100%", padding: "10px 12px", border: "1px solid #eee", borderRadius: 10, fontSize: 13, marginBottom: 8, boxSizing: "border-box" }} />
+          <input type="number" placeholder="কত points redeem করবে?" style={{ width: "100%", padding: "10px 12px", border: "1px solid #eee", borderRadius: 10, fontSize: 13, marginBottom: 12, boxSizing: "border-box" }} />
           <button style={{ width: "100%", padding: "12px", background: "#3C3489", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-            Redeem Here
+            Redeem করো
           </button>
         </div>
       )}
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)", background: "#3C3489", color: "#fff", padding: "10px 20px", borderRadius: 20, fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" as const }}>
+        <div style={{ position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)", background: "#3C3489", color: "#fff", padding: "10px 20px", borderRadius: 20, fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>
           {toast}
         </div>
       )}
