@@ -71,12 +71,10 @@ export const APP_SPLASH_BACKGROUND_COLOR: string = '#f7f7f7';
  * Account association for the mini app.
  * Used to associate the mini app with a Farcaster account.
  * If not provided, the mini app will be unsigned and have limited capabilities.
- export const APP_ACCOUNT_ASSOCIATION: AccountAssociation | undefined = {
-  "accountAssociation": {
-    "header": "eyJmaWQiOjI2MTYwMCwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDVkN2Q3ZEVkRjllNEYzY0FmNTc3MTg3OTA2NDYxNTI2MTZDYzgyZWUifQ",
-    "payload": "eyJkb21haW4iOiJjYXN0cmV3YXJkcy1hcHAudmVyY2VsLmFwcCJ9",
-    "signature": "HY32FQzJd+6+t/iV22GfKo43pBX9Um0fEoCiU4ojoR1GBv+xjTbDWn5Iwsj1nRY3Op56a+bcxJCL0+0cAOzF9xs="
-  }
+export const APP_ACCOUNT_ASSOCIATION: AccountAssociation | undefined = {
+  "header": "eyJmaWQiOjI2MTYwMCwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDVkN2Q3ZEVkRjllNEYzY0FmNTc3MTg3OTA2NDYxNTI2MTZDYzgyZWUifQ",
+  "payload": "eyJkb21haW4iOiJjYXN0cmV3YXJkcy1hcHAudmVyY2VsLmFwcCJ9",
+  "signature": "HY32FQzJd+6+t/iV22GfKo43pBX9Um0fEoCiU4ojoR1GBv+xjTbDWn5Iwsj1nRY3Op56a+bcxJCL0+0cAOzF9xs="
 };
 } UI Configuration ---
 /**
