@@ -13,7 +13,7 @@ export const APP_TAGS: string[] = ['rewards', 'crypto', 'checkin', 'spin'];
 
 // --- Asset URLs ---
 export const APP_ICON_URL: string = `${APP_URL}/icon.png`;
-export const APP_OG_IMAGE_URL: string = `${APP_URL}/api/opengraph-image`;
+export const APP_OG_IMAGE_URL: string = `${APP_URL}/og-image.png`;
 export const APP_SPLASH_URL: string = `${APP_URL}/splash.png`;
 export const APP_SPLASH_BACKGROUND_COLOR: string = '#3C3489';
 
