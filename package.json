@@ -58,7 +58,7 @@
     "@upstash/redis": "^1.34.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "dotenv": "^16.4.7",
+    "dotenv": "^17.4.2",
     "lucide-react": "^0.469.0",
     "mipd": "^0.0.7",
     "next": "^15",
