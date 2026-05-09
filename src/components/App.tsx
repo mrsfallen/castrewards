@@ -1,21 +1,22 @@
 ﻿"use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount, useSendTransaction, useConnect } from "wagmi";
 import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
 import { parseEther } from "viem";
+import { sdk } from "@farcaster/miniapp-sdk";
 
 type Tab = "home" | "spin" | "missions" | "invite" | "wallet";
-type SpinPrize = { label: string; pts: number; usdc: number; color: string; bg: string };
+type SpinPrize = { label: string; pts: number; usdc: number; bg: string };
 
 const PRIZES: SpinPrize[] = [
-  { label: "10 pts", pts: 10, usdc: 0, color: "#fff", bg: "#6d28d9" },
-  { label: "0.02 USDC", pts: 0, usdc: 0.02, color: "#fff", bg: "#0f766e" },
-  { label: "20 pts", pts: 20, usdc: 0, color: "#fff", bg: "#7c3aed" },
-  { label: "Try Again", pts: 0, usdc: 0, color: "#fff", bg: "#374151" },
-  { label: "10 pts", pts: 10, usdc: 0, color: "#fff", bg: "#6d28d9" },
-  { label: "20 pts", pts: 20, usdc: 0, color: "#fff", bg: "#7c3aed" },
-  { label: "0.02 USDC", pts: 0, usdc: 0.02, color: "#fff", bg: "#0f766e" },
-  { label: "Try Again", pts: 0, usdc: 0, color: "#fff", bg: "#374151" },
+  { label: "10 pts", pts: 10, usdc: 0, bg: "#6d28d9" },
+  { label: "0.02 USDC", pts: 0, usdc: 0.02, bg: "#0f766e" },
+  { label: "20 pts", pts: 20, usdc: 0, bg: "#7c3aed" },
+  { label: "Try Again", pts: 0, usdc: 0, bg: "#374151" },
+  { label: "10 pts", pts: 10, usdc: 0, bg: "#6d28d9" },
+  { label: "20 pts", pts: 20, usdc: 0, bg: "#7c3aed" },
+  { label: "0.02 USDC", pts: 0, usdc: 0.02, bg: "#0f766e" },
+  { label: "Try Again", pts: 0, usdc: 0, bg: "#374151" },
 ];
 
 const TREASURY = "0x5d7d7dEdF9e4F3cAf57718790646152616Cc82ee";
@@ -34,25 +35,30 @@ export default function App() {
   const [streak, setStreak] = useState(3);
   const [checkedIn, setCheckedIn] = useState(false);
   const [redeemAmt, setRedeemAmt] = useState("");
+  const [fcUser, setFcUser] = useState<any>(null);
 
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
   const { sendTransaction } = useSendTransaction();
+
+  useEffect(() => {
+    sdk.actions.ready();
+    sdk.context.then((ctx: any) => {
+      if (ctx?.user?.fid) {
+        fetch("/api/users?fids=" + ctx.user.fid)
+          .then(r => r.json())
+          .then(data => { if (data.users?.[0]) setFcUser(data.users[0]); });
+      }
+    });
+  }, []);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2800); };
 
   const claimFreeSpins = () => {
     if (dailySpinsClaimed) { showToast("Already claimed today!"); return; }
     if (!isConnected) { connect({ connector: farcasterFrame() }); return; }
-    sendTransaction({
-      to: TREASURY as `0x${string}`,
-      value: parseEther("0.00002"),
-    }, {
-      onSuccess: () => {
-        setFreeSpins(f => f + 2);
-        setDailySpinsClaimed(true);
-        showToast("Tx confirmed! 2 free spins claimed.");
-      },
+    sendTransaction({ to: TREASURY as `0x${string}`, value: parseEther("0.00002") }, {
+      onSuccess: () => { setFreeSpins(f => f + 2); setDailySpinsClaimed(true); showToast("2 free spins claimed!"); },
       onError: () => showToast("Transaction failed!"),
     });
   };
@@ -62,8 +68,7 @@ export default function App() {
     setSpinResult(null);
     const winner = Math.floor(Math.random() * PRIZES.length);
     const seg = 360 / PRIZES.length;
-    const newRot = rot + 360 * 8 + (360 - winner * seg - seg / 2);
-    setRot(newRot);
+    setRot(r => r + 360 * 8 + (360 - winner * seg - seg / 2));
     setTimeout(() => {
       const prize = PRIZES[winner];
       setSpinResult(prize);
@@ -77,16 +82,13 @@ export default function App() {
   const doSpin = (type: "free" | "paid") => {
     if (spinning) return;
     if (type === "free") {
-      if (freeSpins <= 0) { showToast("No free spins! Claim daily first."); return; }
+      if (freeSpins <= 0) { showToast("No free spins!"); return; }
       setFreeSpins(f => f - 1);
       runSpinAnimation();
     } else {
       if (!isConnected) { connect({ connector: farcasterFrame() }); return; }
-      sendTransaction({
-        to: TREASURY as `0x${string}`,
-        value: parseEther("0.000012"),
-      }, {
-        onSuccess: () => runSpinAnimation(),
+      sendTransaction({ to: TREASURY as `0x${string}`, value: parseEther("0.000012") }, {
+        onSuccess: runSpinAnimation,
         onError: () => showToast("Transaction failed!"),
       });
     }
@@ -100,10 +102,8 @@ export default function App() {
   };
 
   const doCheckin = () => {
-    if (checkedIn) { showToast("Already checked in today!"); return; }
-    setCheckedIn(true);
-    setStreak(s => s + 1);
-    setPts(p => p + 10);
+    if (checkedIn) { showToast("Already checked in!"); return; }
+    setCheckedIn(true); setStreak(s => s + 1); setPts(p => p + 10);
     showToast("+10 pts! Come back tomorrow.");
   };
 
@@ -111,15 +111,8 @@ export default function App() {
     const amt = parseInt(redeemAmt);
     if (!amt || pts < amt) { showToast("Not enough points!"); return; }
     if (!isConnected) { connect({ connector: farcasterFrame() }); return; }
-    sendTransaction({
-      to: TREASURY as `0x${string}`,
-      value: parseEther("0.000001"),
-    }, {
-      onSuccess: () => {
-        setPts(p => p - amt);
-        showToast("Redeemed " + amt + " pts!");
-        setRedeemAmt("");
-      },
+    sendTransaction({ to: TREASURY as `0x${string}`, value: parseEther("0.000001") }, {
+      onSuccess: () => { setPts(p => p - amt); showToast("Redeemed " + amt + " pts!"); setRedeemAmt(""); },
       onError: () => showToast("Transaction failed!"),
     });
   };
@@ -127,14 +120,8 @@ export default function App() {
   const doClaimUsdc = () => {
     if (usdc <= 0) { showToast("No USDC to claim!"); return; }
     if (!isConnected) { connect({ connector: farcasterFrame() }); return; }
-    sendTransaction({
-      to: TREASURY as `0x${string}`,
-      value: parseEther("0.000001"),
-    }, {
-      onSuccess: () => {
-        setUsdc(0);
-        showToast("USDC sent to your wallet!");
-      },
+    sendTransaction({ to: TREASURY as `0x${string}`, value: parseEther("0.000001") }, {
+      onSuccess: () => { setUsdc(0); showToast("USDC sent to wallet!"); },
       onError: () => showToast("Transaction failed!"),
     });
   };
@@ -147,37 +134,39 @@ export default function App() {
   ];
 
   const seg = 360 / PRIZES.length;
-
   const buildWheel = () => {
     const cx = 130, cy = 130, r = 120;
     return PRIZES.map((p, i) => {
-      const startAngle = i * seg - 90;
-      const endAngle = startAngle + seg;
-      const x1 = cx + r * Math.cos(startAngle * Math.PI / 180);
-      const y1 = cy + r * Math.sin(startAngle * Math.PI / 180);
-      const x2 = cx + r * Math.cos(endAngle * Math.PI / 180);
-      const y2 = cy + r * Math.sin(endAngle * Math.PI / 180);
-      const tx = cx + (r * 0.65) * Math.cos((startAngle + seg / 2) * Math.PI / 180);
-      const ty = cy + (r * 0.65) * Math.sin((startAngle + seg / 2) * Math.PI / 180);
+      const a1 = i * seg - 90, a2 = a1 + seg;
+      const x1 = cx + r * Math.cos(a1 * Math.PI / 180), y1 = cy + r * Math.sin(a1 * Math.PI / 180);
+      const x2 = cx + r * Math.cos(a2 * Math.PI / 180), y2 = cy + r * Math.sin(a2 * Math.PI / 180);
+      const tx = cx + r * 0.65 * Math.cos((a1 + seg / 2) * Math.PI / 180);
+      const ty = cy + r * 0.65 * Math.sin((a1 + seg / 2) * Math.PI / 180);
       return (
         <g key={i}>
           <path d={"M " + cx + " " + cy + " L " + x1 + " " + y1 + " A " + r + " " + r + " 0 0 1 " + x2 + " " + y2 + " Z"} fill={p.bg} stroke="#0d0d12" strokeWidth="2"/>
-          <text x={tx} y={ty} fill="#fff" fontSize="11" fontWeight="600" textAnchor="middle" dominantBaseline="middle" transform={"rotate(" + (startAngle + seg / 2 + 90) + " " + tx + " " + ty + ")"} style={{ fontFamily: "sans-serif" }}>{p.label}</text>
+          <text x={tx} y={ty} fill="#fff" fontSize="11" fontWeight="600" textAnchor="middle" dominantBaseline="middle" transform={"rotate(" + (a1 + seg / 2 + 90) + " " + tx + " " + ty + ")"}>{p.label}</text>
         </g>
       );
     });
   };
 
   const shortAddr = isConnected && address ? address.slice(0,6) + "..." + address.slice(-4) : "Not connected";
+  const userName = fcUser?.display_name || fcUser?.username || "Your Profile";
+  const userHandle = fcUser?.username ? "@" + fcUser.username : shortAddr;
+  const userPfp = fcUser?.pfp_url || null;
+  const followers = fcUser?.follower_count?.toLocaleString() || "—";
+  const following = fcUser?.following_count?.toLocaleString() || "—";
 
   return (
-    <div style={{ background: "#0d0d12", minHeight: "100vh", maxWidth: 430, margin: "0 auto", fontFamily: "sans-serif", color: "#fff", display: "flex", flexDirection: "column", position: "relative" }}>
+    <div style={{ background: "#0d0d12", minHeight: "100vh", maxWidth: 430, margin: "0 auto", fontFamily: "sans-serif", color: "#fff", display: "flex", flexDirection: "column" }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: 80 }}>
 
         <div style={{ background: "#13131a", padding: "14px 18px 12px", borderBottom: "0.5px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>CR</div>
+            <img src="/icon.png" onError={(e: any) => { e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }} style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }} />
+            <div style={{ width: 34, height: 34, borderRadius: "50%", background: "linear-gradient(135deg,#7c3aed,#4f46e5)", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, display: "none" }}>CR</div>
             <div><div style={{ fontSize: 16, fontWeight: 600 }}>CastRewards</div><div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 1 }}>earn · spin · redeem</div></div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -190,30 +179,47 @@ export default function App() {
           <div style={{ margin: "14px 14px 0", background: "linear-gradient(135deg,#4c1d95,#6d28d9)", borderRadius: 20, padding: 18, position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: -30, right: -30, width: 120, height: 120, borderRadius: "50%", background: "rgba(255,255,255,0.05)" }} />
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginBottom: 4, letterSpacing: "0.06em" }}>TOTAL POINTS</div>
-            <div style={{ fontSize: 38, fontWeight: 700, letterSpacing: -1, lineHeight: 1 }}>{pts}</div>
+            <div style={{ fontSize: 38, fontWeight: 700, letterSpacing: -1 }}>{pts}</div>
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", marginTop: 4, marginBottom: 16 }}>Keep earning to unlock rewards</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 8px", textAlign: "center" }}><div style={{ fontSize: 16, fontWeight: 600 }}>{freeSpins}</div><div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>Free spins</div></div>
-              <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 8px", textAlign: "center" }}><div style={{ fontSize: 16, fontWeight: 600 }}>${usdc.toFixed(2)}</div><div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>USDC won</div></div>
-              <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 8px", textAlign: "center" }}><div style={{ fontSize: 16, fontWeight: 600 }}>{doneMissions.length}/4</div><div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>Missions</div></div>
+              {[{ val: freeSpins, lbl: "Free spins" }, { val: "$" + usdc.toFixed(2), lbl: "USDC won" }, { val: doneMissions.length + "/4", lbl: "Missions" }].map(s => (
+                <div key={s.lbl} style={{ background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
+                  <div style={{ fontSize: 16, fontWeight: 600 }}>{s.val}</div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>{s.lbl}</div>
+                </div>
+              ))}
             </div>
           </div>
 
           <div style={{ margin: "10px 14px 0", background: "#13131a", borderRadius: 16, padding: 14, border: "0.5px solid rgba(255,255,255,0.07)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 12 }}>
-              <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#312e81,#4c1d95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, color: "#c4b5fd", flexShrink: 0, border: "2px solid rgba(139,92,246,0.3)" }}>U</div>
-              <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 600 }}>Your Profile</div><div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2, fontFamily: "monospace" }}>{shortAddr}</div></div>
+              {userPfp
+                ? <img src={userPfp} style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(139,92,246,0.3)", flexShrink: 0 }} />
+                : <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#312e81,#4c1d95)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, color: "#c4b5fd", flexShrink: 0, border: "2px solid rgba(139,92,246,0.3)" }}>
+                    {userName.charAt(0).toUpperCase()}
+                  </div>
+              }
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{userName}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{userHandle}</div>
+              </div>
               <div style={{ fontSize: 11, color: isConnected ? "#4ade80" : "#f87171", background: isConnected ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", borderRadius: 20, padding: "3px 10px", border: "0.5px solid " + (isConnected ? "rgba(74,222,128,0.25)" : "rgba(248,113,113,0.25)") }}>{isConnected ? "Connected" : "No wallet"}</div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {[{ label: "Neynar Score", val: "84.2" }, { label: "Active Days", val: "142" }, { label: "Followers", val: "1,204" }, { label: "Recasts", val: "3,891" }].map(s => (
-                <div key={s.label} style={{ background: "#1a1a24", borderRadius: 10, padding: "9px 11px" }}><div style={{ fontSize: 13, fontWeight: 600 }}>{s.val}</div><div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 1 }}>{s.label}</div></div>
+              {[{ label: "Followers", val: followers }, { label: "Following", val: following }, { label: "FID", val: fcUser?.fid || "—" }, { label: "Score", val: fcUser?.experimental?.neynar_user_score?.toFixed(1) || "—" }].map(s => (
+                <div key={s.label} style={{ background: "#1a1a24", borderRadius: 10, padding: "9px 11px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{s.val}</div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 1 }}>{s.label}</div>
+                </div>
               ))}
             </div>
           </div>
 
           <div onClick={doCheckin} style={{ margin: "10px 14px 0", background: checkedIn ? "#111" : "#1a1025", border: "1px solid " + (checkedIn ? "rgba(255,255,255,0.06)" : "rgba(139,92,246,0.35)"), borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: checkedIn ? "default" : "pointer" }}>
-            <div><div style={{ fontSize: 14, fontWeight: 600 }}>{checkedIn ? "✓" : "📅"} Daily check-in {checkedIn && <span style={{ fontSize: 11, color: "#4ade80", background: "rgba(74,222,128,0.1)", borderRadius: 20, padding: "2px 8px", marginLeft: 6 }}>Done</span>}</div><div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 3 }}>+10 pts every day</div></div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{checkedIn ? "✓" : "📅"} Daily check-in {checkedIn && <span style={{ fontSize: 11, color: "#4ade80", background: "rgba(74,222,128,0.1)", borderRadius: 20, padding: "2px 8px", marginLeft: 6 }}>Done</span>}</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 3 }}>+10 pts every day</div>
+            </div>
             {!checkedIn && <button style={{ background: "linear-gradient(135deg,#7c3aed,#6d28d9)", border: "none", borderRadius: 10, padding: "8px 16px", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Check in</button>}
           </div>
 
@@ -241,7 +247,7 @@ export default function App() {
                   <svg width="260" height="260" viewBox="0 0 260 260" style={{ transform: "rotate(" + rot + "deg)", transition: spinning ? "transform 4s cubic-bezier(0.17,0.85,0.12,1)" : "none" }}>
                     {buildWheel()}
                     <circle cx="130" cy="130" r="18" fill="#0d0d12" stroke="rgba(255,255,255,0.15)" strokeWidth="2"/>
-                    <text x="130" y="135" fontSize="10" fill="rgba(255,255,255,0.6)" textAnchor="middle" dominantBaseline="middle" style={{ fontFamily: "sans-serif", fontWeight: "700" }}>GO</text>
+                    <text x="130" y="135" fontSize="10" fill="rgba(255,255,255,0.6)" textAnchor="middle" dominantBaseline="middle">GO</text>
                   </svg>
                 </div>
               </div>
@@ -256,15 +262,21 @@ export default function App() {
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa", marginBottom: 4 }}>🎁 Free Spin</div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>Daily limit: 2 spins</div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 10 }}>Claim fee: 0.00002 ETH</div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>Available:</span><span style={{ fontSize: 13, fontWeight: 700, color: freeSpins > 0 ? "#a78bfa" : "rgba(255,255,255,0.3)" }}>{freeSpins}/2</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>Available:</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: freeSpins > 0 ? "#a78bfa" : "rgba(255,255,255,0.3)" }}>{freeSpins}/2</span>
+                  </div>
                   <button onClick={claimFreeSpins} disabled={dailySpinsClaimed} style={{ width: "100%", background: dailySpinsClaimed ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg,#7c3aed,#6d28d9)", border: "none", borderRadius: 10, padding: "9px 0", fontSize: 12, color: dailySpinsClaimed ? "rgba(255,255,255,0.3)" : "#fff", fontWeight: 600, cursor: dailySpinsClaimed ? "default" : "pointer", marginBottom: 6 }}>{dailySpinsClaimed ? "Claimed today" : "Claim (0.00002 ETH)"}</button>
-                  <button onClick={() => doSpin("free")} disabled={freeSpins <= 0 || spinning} style={{ width: "100%", background: freeSpins > 0 && !spinning ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)", border: "0.5px solid " + (freeSpins > 0 ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 10, padding: "9px 0", fontSize: 12, color: freeSpins > 0 && !spinning ? "#a78bfa" : "rgba(255,255,255,0.2)", fontWeight: 600, cursor: freeSpins > 0 && !spinning ? "pointer" : "default" }}>{spinning ? "Spinning..." : "Use free spin"}</button>
+                  <button onClick={() => doSpin("free")} disabled={freeSpins <= 0 || spinning} style={{ width: "100%", background: freeSpins > 0 && !spinning ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)", border: "0.5px solid rgba(139,92,246,0.4)", borderRadius: 10, padding: "9px 0", fontSize: 12, color: freeSpins > 0 && !spinning ? "#a78bfa" : "rgba(255,255,255,0.2)", fontWeight: 600, cursor: freeSpins > 0 && !spinning ? "pointer" : "default" }}>{spinning ? "Spinning..." : "Use free spin"}</button>
                 </div>
                 <div style={{ background: "#1a1a24", borderRadius: 14, padding: 14, border: "0.5px solid rgba(20,184,166,0.2)" }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#2dd4bf", marginBottom: 4 }}>💎 Paid Spin</div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 2 }}>Unlimited spins</div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 10 }}>Cost: 0.03 USD in ETH</div>
-                  <div style={{ background: "rgba(20,184,166,0.08)", border: "0.5px solid rgba(20,184,166,0.2)", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}><div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 2 }}>Prizes</div><div style={{ fontSize: 11, color: "#2dd4bf" }}>10 pts · 20 pts · 0.02 USDC</div></div>
+                  <div style={{ background: "rgba(20,184,166,0.08)", border: "0.5px solid rgba(20,184,166,0.2)", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 2 }}>Prizes</div>
+                    <div style={{ fontSize: 11, color: "#2dd4bf" }}>10 pts · 20 pts · 0.02 USDC</div>
+                  </div>
                   <button onClick={() => doSpin("paid")} disabled={spinning} style={{ width: "100%", background: spinning ? "rgba(255,255,255,0.03)" : "linear-gradient(135deg,#0f766e,#14b8a6)", border: "none", borderRadius: 10, padding: "9px 0", fontSize: 12, color: spinning ? "rgba(255,255,255,0.3)" : "#fff", fontWeight: 600, cursor: spinning ? "default" : "pointer" }}>{spinning ? "Spinning..." : "Pay & Spin (ETH)"}</button>
                 </div>
               </div>
@@ -309,7 +321,7 @@ export default function App() {
               <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>Invite and earn</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", lineHeight: 1.7, marginBottom: 18 }}>Share your link. When a friend joins and completes their first mission, you both earn bonus points.</div>
               <div style={{ background: "#1a1a24", border: "0.5px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, marginBottom: 12, textAlign: "left" }}>
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontFamily: "monospace", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>castrewards-app.vercel.app/ref/your-fid</span>
+                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontFamily: "monospace", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>castrewards-app.vercel.app/ref/{fcUser?.fid || "your-fid"}</span>
                 <button onClick={() => showToast("Link copied!")} style={{ background: "#7c3aed", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, color: "#fff", cursor: "pointer", fontWeight: 600 }}>Copy</button>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -332,19 +344,14 @@ export default function App() {
         {tab === "wallet" && (
           <div style={{ padding: "14px 14px 0" }}>
             <div style={{ background: "linear-gradient(135deg,#1a1025,#13131a)", borderRadius: 20, padding: 18, border: "1px solid rgba(139,92,246,0.2)", marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4, letterSpacing: "0.06em" }}>WALLET</div>
-              <div style={{ fontSize: 13, fontFamily: "monospace", color: "#a78bfa", marginBottom: 4 }}>{isConnected && address ? address : "Not connected"}</div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginBottom: 16 }}>Base network</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4, letterSpacing: "0.06em" }}>WALLET · BASE NETWORK</div>
+              <div style={{ fontSize: 12, fontFamily: "monospace", color: "#a78bfa", marginBottom: 14 }}>{isConnected && address ? address : "Not connected"}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "12px 10px", textAlign: "center" }}><div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>Points</div><div style={{ fontSize: 20, fontWeight: 700, color: "#a78bfa" }}>{pts}</div></div>
                 <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 12, padding: "12px 10px", textAlign: "center" }}><div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>USDC won</div><div style={{ fontSize: 20, fontWeight: 700, color: "#2dd4bf" }}>${usdc.toFixed(4)}</div></div>
               </div>
             </div>
-
-            {!isConnected && (
-              <button onClick={() => connect({ connector: farcasterFrame() })} style={{ width: "100%", background: "linear-gradient(135deg,#7c3aed,#6d28d9)", border: "none", borderRadius: 14, padding: 14, fontSize: 14, color: "#fff", fontWeight: 600, cursor: "pointer", marginBottom: 10 }}>Connect Wallet</button>
-            )}
-
+            {!isConnected && <button onClick={() => connect({ connector: farcasterFrame() })} style={{ width: "100%", background: "linear-gradient(135deg,#7c3aed,#6d28d9)", border: "none", borderRadius: 14, padding: 14, fontSize: 14, color: "#fff", fontWeight: 600, cursor: "pointer", marginBottom: 10 }}>Connect Wallet</button>}
             <div style={{ background: "#13131a", borderRadius: 16, padding: 16, border: "0.5px solid rgba(255,255,255,0.07)", marginBottom: 10 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>💸 Claim USDC Reward</div>
               <div style={{ background: "#1a1a24", borderRadius: 10, padding: "10px 12px", marginBottom: 12, display: "flex", justifyContent: "space-between" }}>
@@ -353,7 +360,6 @@ export default function App() {
               </div>
               <button onClick={doClaimUsdc} style={{ width: "100%", background: usdc > 0 ? "linear-gradient(135deg,#0f766e,#14b8a6)" : "rgba(255,255,255,0.04)", border: "none", borderRadius: 11, padding: 12, fontSize: 13, color: usdc > 0 ? "#fff" : "rgba(255,255,255,0.2)", fontWeight: 600, cursor: usdc > 0 ? "pointer" : "default" }}>Claim to wallet</button>
             </div>
-
             <div style={{ background: "#13131a", borderRadius: 16, padding: 16, border: "0.5px solid rgba(255,255,255,0.07)", marginBottom: 10 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>🏆 Redeem Points</div>
               <div style={{ background: "#1a1a24", borderRadius: 10, padding: "10px 12px", marginBottom: 10, display: "flex", justifyContent: "space-between" }}>
@@ -366,9 +372,8 @@ export default function App() {
                   <button key={amt} onClick={() => setRedeemAmt(String(amt))} style={{ background: redeemAmt === String(amt) ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)", border: "0.5px solid " + (redeemAmt === String(amt) ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"), borderRadius: 10, padding: "8px 0", fontSize: 13, color: redeemAmt === String(amt) ? "#a78bfa" : "rgba(255,255,255,0.5)", cursor: "pointer", fontWeight: 600 }}>{amt} pts</button>
                 ))}
               </div>
-              <button onClick={doRedeem} style={{ width: "100%", background: redeemAmt && pts >= parseInt(redeemAmt) ? "linear-gradient(135deg,#7c3aed,#6d28d9)" : "rgba(255,255,255,0.04)", border: "none", borderRadius: 11, padding: 12, fontSize: 13, color: redeemAmt && pts >= parseInt(redeemAmt) ? "#fff" : "rgba(255,255,255,0.2)", fontWeight: 600, cursor: redeemAmt && pts >= parseInt(redeemAmt) ? "pointer" : "default" }}>Redeem {redeemAmt ? redeemAmt + " pts" : ""}</button>
+              <button onClick={doRedeem} style={{ width: "100%", background: redeemAmt && pts >= parseInt(redeemAmt) ? "linear-gradient(135deg,#7c3aed,#6d28d9)" : "rgba(255,255,255,0.04)", border: "none", borderRadius: 11, padding: 12, fontSize: 13, color: redeemAmt && pts >= parseInt(redeemAmt) ? "#fff" : "rgba(255,255,255,0.2)", fontWeight: 600, cursor: "pointer" }}>Redeem {redeemAmt ? redeemAmt + " pts" : ""}</button>
             </div>
-
             <div style={{ background: "#13131a", borderRadius: 16, padding: 16, border: "0.5px solid rgba(255,255,255,0.07)" }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>📋 Transaction History</div>
               {[{ label: "Spin reward", val: "+10 pts", time: "2m ago", color: "#a78bfa" }, { label: "Mission done", val: "+20 pts", time: "1h ago", color: "#a78bfa" }, { label: "Spin reward", val: "+0.02 USDC", time: "3h ago", color: "#2dd4bf" }, { label: "Daily check-in", val: "+10 pts", time: "1d ago", color: "#a78bfa" }].map((tx, i, arr) => (
