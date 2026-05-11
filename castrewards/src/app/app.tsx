@@ -12,7 +12,8 @@ export default function App() {
   const [doneMissions, setDoneMissions] = useState<number[]>([]);
   const [toast, setToast] = useState("");
   const [streak, setStreak] = useState(3);
-
+const [showDonate, setShowDonate] = useState(false);
+const [donateAmt, setDonateAmt] = useState("0.001");
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
@@ -50,7 +51,17 @@ export default function App() {
     { id: 3, name: "Comment mission", desc: "Reply to any cast", pts: 15, bg: "rgba(29,78,216,0.15)", color: "#60a5fa" },
     { id: 4, name: "Follow mission", desc: "Follow the featured user", pts: 25, bg: "rgba(180,83,9,0.15)", color: "#fbbf24" },
   ];
-
+const doDonate = () => {
+  if (!isConnected) { connect({ connector: farcasterFrame() }); return; }
+  sendTransaction({
+    to: TREASURY as `0x${string}`,
+    value: parseEther(donateAmt),
+  }, {
+    onSuccess: () => { setShowDonate(false); showToast("Thank you for your support! 💛"); },
+    onError: () => showToast("Transaction failed!"),
+  });
+};
+<button onClick={() => setShowDonate(true)} style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 9, padding: "7px 13px", color: "#f59e0b", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>Donate</button>
   const navIcons: Record<Tab, string> = { home: "⌂", spin: "⟳", missions: "◎", invite: "↗" };
 
   return (
@@ -243,7 +254,27 @@ export default function App() {
           </button>
         ))}
       </div>
-
+{showDonate && (
+  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+    <div style={{ background: "#13131a", borderRadius: "20px 20px 0 0", padding: 20, width: "100%", maxWidth: 430, border: "0.5px solid rgba(255,255,255,0.1)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>💛 Support CastRewards</div>
+        <button onClick={() => setShowDonate(false)} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "50%", width: 30, height: 30, color: "#fff", fontSize: 16, cursor: "pointer" }}>✕</button>
+      </div>
+      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 16 }}>Select amount to tip the creator</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
+        {["0.001", "0.005", "0.01", "0.05", "0.1", "0.5"].map(amt => (
+          <button key={amt} onClick={() => setDonateAmt(amt)} style={{ background: donateAmt === amt ? "rgba(245,158,11,0.2)" : "rgba(255,255,255,0.05)", border: "1px solid " + (donateAmt === amt ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.08)"), borderRadius: 10, padding: "10px 0", fontSize: 13, color: donateAmt === amt ? "#f59e0b" : "rgba(255,255,255,0.6)", fontWeight: 600, cursor: "pointer" }}>{amt} ETH</button>
+        ))}
+      </div>
+      <div style={{ background: "#1a1a24", borderRadius: 10, padding: "10px 14px", marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>You are sending</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b" }}>{donateAmt} ETH</span>
+      </div>
+      <button onClick={doDonate} style={{ width: "100%", background: "linear-gradient(135deg,#b45309,#f59e0b)", border: "none", borderRadius: 12, padding: 13, fontSize: 14, color: "#fff", fontWeight: 700, cursor: "pointer" }}>Send {donateAmt} ETH 💛</button>
+    </div>
+  </div>
+)}
       {toast && (
         <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "rgba(139,92,246,0.95)", color: "#fff", padding: "8px 20px", borderRadius: 20, fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", zIndex: 200 }}>
           {toast}
